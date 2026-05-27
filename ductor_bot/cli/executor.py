@@ -180,6 +180,9 @@ async def run_streaming_subprocess(
             is_error=True,
         )
         return
+    except asyncio.CancelledError:
+        await _kill_and_reap_cancelled_process(process, provider_label)
+        raise
     finally:
         await _cancel_drain(stderr_drain)
         if tracked and reg:
@@ -315,6 +318,9 @@ async def run_oneshot_subprocess(
         await process.wait()
         logger.warning("%s timed out after %.0fs", provider_label, spec.timeout_seconds)
         return CLIResponse(result="", is_error=True, timed_out=True)
+    except asyncio.CancelledError:
+        await _kill_and_reap_cancelled_process(process, provider_label)
+        raise
     finally:
         if tracked and reg:
             reg.unregister(tracked)
@@ -338,3 +344,15 @@ async def _cancel_drain(drain: asyncio.Task[bytes]) -> None:
         drain.cancel()
         with contextlib.suppress(BaseException):
             await drain
+
+
+async def _kill_and_reap_cancelled_process(
+    process: asyncio.subprocess.Process,
+    provider_label: str,
+) -> None:
+    """Best-effort subprocess-tree teardown for external task cancellation."""
+    with contextlib.suppress(ProcessLookupError):
+        force_kill_process_tree(process.pid)
+    with contextlib.suppress(BaseException):
+        await asyncio.shield(process.wait())
+    logger.info("%s subprocess cancelled pid=%s", provider_label, process.pid)
