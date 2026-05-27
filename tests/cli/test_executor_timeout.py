@@ -9,16 +9,21 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ductor_bot.cli.executor import (
+    run_oneshot_subprocess,
+    run_streaming_subprocess,
     SubprocessSpec,
     _stream_with_controller,
     _stream_with_timeout,
 )
+from ductor_bot.cli.base import CLIConfig
 from ductor_bot.cli.stream_events import StreamEvent
 from ductor_bot.cli.timeout_controller import (
     TimeoutConfig,
     TimeoutController,
     TimeoutWarning,
 )
+from ductor_bot.cli.types import CLIResponse
+from ductor_bot.cli.process_registry import ProcessRegistry
 
 
 def _make_stdout(lines: list[bytes], delay: float = 0.0) -> AsyncMock:
@@ -227,3 +232,124 @@ class TestBackwardCompat:
         )
         assert spec.timeout_controller is None
         assert spec.timeout_seconds is None
+
+
+def _make_config(process_registry: ProcessRegistry | None = None) -> CLIConfig:
+    """Create a minimal CLIConfig for executor tests."""
+    return CLIConfig(
+        provider="codex",
+        working_dir=".",
+        process_registry=process_registry,
+        chat_id=123,
+        process_label="task:test-cancel",
+    )
+
+
+def _parse_output(stdout: bytes, stderr: bytes, returncode: int | None) -> CLIResponse:
+    return CLIResponse(
+        result=stdout.decode(errors="replace"),
+        is_error=bool(returncode),
+        returncode=returncode,
+        stderr=stderr.decode(errors="replace"),
+    )
+
+
+class TestCancellationCleanup:
+    """Cancellation must kill subprocess trees, not just unregister them."""
+
+    async def test_oneshot_cancel_kills_and_unregisters(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async def _hang_communicate(
+            _input: bytes | None = None,
+            **_: object,
+        ) -> tuple[bytes, bytes]:
+            await asyncio.sleep(999)
+            return b"", b""
+
+        process = MagicMock(spec=asyncio.subprocess.Process)
+        process.pid = 23456
+        process.returncode = None
+        process.wait = AsyncMock(return_value=0)
+        process.communicate = AsyncMock(side_effect=_hang_communicate)
+        process.stdin = None
+        process.stdout = AsyncMock()
+        process.stderr = AsyncMock()
+
+        monkeypatch.setattr(
+            asyncio,
+            "create_subprocess_exec",
+            AsyncMock(return_value=process),
+        )
+        kill_tree = MagicMock()
+        monkeypatch.setattr("ductor_bot.cli.executor.force_kill_process_tree", kill_tree)
+
+        registry = ProcessRegistry()
+        spec = SubprocessSpec(exec_cmd=["sleep", "999"], use_cwd=".", prompt="", timeout_seconds=30)
+        task = asyncio.create_task(
+            run_oneshot_subprocess(_make_config(registry), spec, _parse_output),
+        )
+        await asyncio.sleep(0)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        kill_tree.assert_called_once_with(23456)
+        process.wait.assert_awaited_once()
+        assert registry.has_active(123) is False
+
+    async def test_streaming_cancel_kills_and_unregisters(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        async def _hang_readline() -> bytes:
+            await asyncio.sleep(999)
+            return b""
+
+        async def _hang_stderr_read() -> bytes:
+            await asyncio.sleep(999)
+            return b""
+
+        process = MagicMock(spec=asyncio.subprocess.Process)
+        process.pid = 34567
+        process.returncode = None
+        process.wait = AsyncMock(return_value=0)
+        process.stdin = None
+        process.stdout = AsyncMock()
+        process.stdout.readline = AsyncMock(side_effect=_hang_readline)
+        process.stderr = AsyncMock()
+        process.stderr.read = AsyncMock(side_effect=_hang_stderr_read)
+
+        monkeypatch.setattr(
+            asyncio,
+            "create_subprocess_exec",
+            AsyncMock(return_value=process),
+        )
+        kill_tree = MagicMock()
+        monkeypatch.setattr("ductor_bot.cli.executor.force_kill_process_tree", kill_tree)
+
+        registry = ProcessRegistry()
+        spec = SubprocessSpec(exec_cmd=["sleep", "999"], use_cwd=".", prompt="", timeout_seconds=30)
+
+        async def _collect() -> list[StreamEvent]:
+            return [
+                event
+                async for event in run_streaming_subprocess(
+                    _make_config(registry),
+                    spec,
+                    _line_handler,
+                )
+            ]
+
+        task = asyncio.create_task(_collect())
+        await asyncio.sleep(0)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        kill_tree.assert_called_once_with(34567)
+        process.wait.assert_awaited_once()
+        assert registry.has_active(123) is False
