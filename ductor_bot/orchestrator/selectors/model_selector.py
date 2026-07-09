@@ -8,13 +8,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from ductor_bot.cli.auth import AuthStatus, check_all_auth
+from ductor_bot.cli.codex_cache import PINNED_CODEX_MODELS
 from ductor_bot.config import CLAUDE_MODELS_ORDERED, get_gemini_models, update_config_file_async
 from ductor_bot.i18n import t
 from ductor_bot.multiagent.registry import update_agent_fields
 from ductor_bot.orchestrator.selectors.models import Button, ButtonGrid, SelectorResponse
 
 if TYPE_CHECKING:
-    from ductor_bot.cli.codex_cache import CodexModelCache
+    from ductor_bot.cli.codex_cache import CodexModelCache, CodexModelInfo
     from ductor_bot.orchestrator.core import Orchestrator
     from ductor_bot.session import SessionData
     from ductor_bot.session.key import SessionKey
@@ -28,6 +29,7 @@ _EFFORT_LABELS: dict[str, str] = {
     "medium": "Medium",
     "high": "High",
     "xhigh": "XHigh",
+    "max": "Max",
 }
 
 
@@ -91,6 +93,35 @@ def _build_switch_summary(ctx: _SwitchSummaryContext) -> str:
     return "\n".join(parts)
 
 
+def _codex_picker_models(
+    codex_cache: CodexModelCache | None,
+) -> list[CodexModelInfo]:
+    """Codex models to offer in the picker: discovered/cached plus pinned previews.
+
+    Pinned preview models (e.g. GPT-5.6, which the signed-in account cannot yet
+    dispatch) are appended when discovery has not reported them, so they are
+    always selectable via /model. See ``PINNED_CODEX_MODELS`` in codex_cache.
+    """
+    base = list(codex_cache.models) if codex_cache else []
+    known = {m.id for m in base}
+    return base + [m for m in PINNED_CODEX_MODELS if m.id not in known]
+
+
+def _resolve_codex_model(
+    codex_cache: CodexModelCache | None,
+    model_id: str,
+) -> CodexModelInfo | None:
+    """Resolve a Codex model by id from the cache, falling back to pinned previews."""
+    if codex_cache is not None:
+        found = codex_cache.get_model(model_id)
+        if found is not None:
+            return found
+    for pinned in PINNED_CODEX_MODELS:
+        if pinned.id == model_id:
+            return pinned
+    return None
+
+
 def _validate_codex_reasoning_effort(
     orch: Orchestrator,
     model_id: str,
@@ -106,7 +137,7 @@ def _validate_codex_reasoning_effort(
     if codex_cache is None:
         return None
 
-    model_info = codex_cache.get_model(model_id)
+    model_info = _resolve_codex_model(codex_cache, model_id)
     if model_info is None:
         return None
 
@@ -404,8 +435,8 @@ async def _build_model_step(
         keyboard = ButtonGrid(rows=gemini_rows)
         return SelectorResponse(text=f"{header}\n\n{t('model.select_gemini')}", buttons=keyboard)
 
-    # Use cache instead of live discovery
-    codex_models = codex_cache.models if codex_cache else []
+    # Cache-backed list plus always-available pinned preview models (e.g. GPT-5.6).
+    codex_models = _codex_picker_models(codex_cache)
     if not codex_models:
         keyboard = ButtonGrid(
             rows=[
@@ -436,8 +467,8 @@ async def _handle_model_selected(
         result = await switch_model(orch, key, model_id)
         return SelectorResponse(text=result)
 
-    # Use cache instead of live discovery
-    codex_info = codex_cache.get_model(model_id) if codex_cache else None
+    # Cache-backed lookup with pinned-preview fallback (e.g. GPT-5.6).
+    codex_info = _resolve_codex_model(codex_cache, model_id)
     efforts = codex_info.supported_efforts if codex_info else ("low", "medium", "high", "xhigh")
 
     buttons = [
