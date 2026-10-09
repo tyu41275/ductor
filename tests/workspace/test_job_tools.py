@@ -117,3 +117,35 @@ def test_no_notify_skips_delivery(tmp_path: Path) -> None:
     srv.shutdown()
     assert received == []
     assert "notify" not in json.loads((job / "status.json").read_text())
+
+
+def test_timeout_stops_the_whole_process_group(tmp_path: Path) -> None:
+    home = _home(tmp_path, 9, enabled=False)
+    pidfile = tmp_path / "child.pid"
+    job = _job(home, f"sleep 30 & echo $! > {pidfile}; wait", timeout_seconds=1)
+    _run(home, job)
+    assert json.loads((job / "status.json").read_text())["status"] == "timed out"
+    child = int(pidfile.read_text())
+    try:
+        os.kill(child, 0)
+    except ProcessLookupError:
+        return
+    msg = f"child {child} of the timed-out job is still alive"
+    raise AssertionError(msg)
+
+
+def test_cancel_keeps_a_finished_result(tmp_path: Path) -> None:
+    home = _home(tmp_path, 9, enabled=False)
+    job = _job(home, "true")
+    _run(home, job)
+    env = {**os.environ, "DUCTOR_HOME": str(home)}
+    out = subprocess.run(
+        [sys.executable, str(TOOLS / "cancel_job.py"), "j1"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert "already finished" in out.stdout
+    assert json.loads((job / "status.json").read_text())["status"] == "succeeded"

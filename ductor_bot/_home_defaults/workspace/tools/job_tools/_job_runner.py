@@ -6,6 +6,8 @@ Usage (by run_job.py only): _job_runner.py <job_dir>
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -43,6 +45,23 @@ def notify(meta: dict, status: dict, tail: str) -> str:
         return f"delivery failed: {exc}"
 
 
+def stop_group(proc: subprocess.Popen[bytes]) -> None:
+    """SIGTERM the job's process group, then SIGKILL whatever is left after 10 s."""
+    for sig, wait in ((signal.SIGTERM, 10), (signal.SIGKILL, 5)):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            return
+        try:
+            proc.wait(timeout=wait)
+        except subprocess.TimeoutExpired:
+            continue
+        try:
+            os.killpg(proc.pid, 0)
+        except ProcessLookupError:
+            return
+
+
 def main(directory: str) -> int:
     path = Path(directory)
     meta = read_json(path / "meta.json")
@@ -54,17 +73,19 @@ def main(directory: str) -> int:
     )
     timeout = meta.get("timeout_seconds") or None
     with log.open("ab") as out:
+        # Own process group, so a timeout stops everything the command started, not just the shell.
+        proc = subprocess.Popen(  # noqa: S603
+            ["bash", "-lc", meta["command"]],
+            stdout=out,
+            stderr=subprocess.STDOUT,
+            cwd=meta.get("cwd") or None,
+            start_new_session=True,
+        )
         try:
-            proc = subprocess.run(
-                ["bash", "-lc", meta["command"]],
-                stdout=out,
-                stderr=subprocess.STDOUT,
-                cwd=meta.get("cwd") or None,
-                timeout=timeout,
-                check=False,
-            )
-            code, state = proc.returncode, ("succeeded" if proc.returncode == 0 else "failed")
+            code = proc.wait(timeout=timeout)
+            state = "succeeded" if code == 0 else "failed"
         except subprocess.TimeoutExpired:
+            stop_group(proc)
             code, state = None, "timed out"
     mins, secs = divmod(int(time.time() - started), 60)
     status = {
