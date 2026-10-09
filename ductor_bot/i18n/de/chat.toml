@@ -461,3 +461,9 @@ async_task_received = "📥 **Async-Aufgabe empfangen** von `{sender}`\nSession:
 [effort]
 select = "Denkaufwand für {model} wählen:"
 unsupported = "Denkaufwand ist für den Anbieter `{provider}` nicht einstellbar."
+
+[compact]
+no_session = "Keine aktive Sitzung zum Komprimieren."
+unsupported = "Komprimieren wird nur für Claude-Sitzungen unterstützt (diese Sitzung nutzt {provider})."
+failed = "Komprimieren fehlgeschlagen: {error}"
+done = "Sitzung komprimiert. Das Gespräch geht mit einer Zusammenfassung des Bisherigen weiter."

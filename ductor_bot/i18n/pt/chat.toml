@@ -461,3 +461,9 @@ async_task_received = "📥 **Tarefa assíncrona recebida** de `{sender}`\nSess�
 [effort]
 select = "Selecione o esforco de raciocinio para {model}:"
 unsupported = "O esforco de raciocinio nao e configuravel para o provedor `{provider}`."
+
+[compact]
+no_session = "Nenhuma sessão ativa para compactar."
+unsupported = "Compactar só é suportado em sessões Claude (esta sessão usa {provider})."
+failed = "Falha ao compactar: {error}"
+done = "Sessão compactada. A conversa continua com um resumo do que veio antes."

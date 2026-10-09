@@ -15,6 +15,7 @@ DIRECT_COMMANDS: frozenset[str] = frozenset(
         "stop_all",
         "restart",
         "new",
+        "compact",
         "help",
         "start",
         "info",

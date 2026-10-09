@@ -2,6 +2,7 @@
 
 [bot]
 new = "Start new chat"
+compact = "Compact the session"
 reset = "Reset current chat"
 stop = "Stop current + queued msgs"
 interrupt = "Interrupt current, keep queue"

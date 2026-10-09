@@ -2,6 +2,7 @@
 
 [bot]
 new = "Nouveau chat"
+compact = "Compacter la session"
 reset = "Réinitialiser chat"
 stop = "Stopper actuel + file"
 interrupt = "Interrompre, garder file"

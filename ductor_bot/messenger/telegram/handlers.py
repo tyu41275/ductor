@@ -284,3 +284,20 @@ def _reply_attachment_label(message: Message) -> str:
         (message.sticker, "a sticker"),
     )
     return next((label for value, label in labels if value), "a file")
+
+
+async def handle_compact(orchestrator: Orchestrator, bot: Bot, message: Message) -> None:
+    """Handle ``/compact [instructions]``: compact the current session in place."""
+    chat_id = message.chat.id
+    thread_id = get_thread_id(message)
+    parts = (message.text or "").strip().split(None, 1)
+    instructions = parts[1].strip() if len(parts) > 1 else ""
+    key = get_session_key(message)
+    async with TypingContext(bot, chat_id, thread_id=thread_id):
+        status = await orchestrator.compact_active_session(key, instructions)
+    await send_rich(
+        bot,
+        chat_id,
+        status,
+        SendRichOpts(reply_to_message_id=message.message_id, thread_id=thread_id),
+    )
