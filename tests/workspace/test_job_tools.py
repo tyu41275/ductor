@@ -164,3 +164,29 @@ def test_zero_timeout_is_refused(tmp_path: Path) -> None:
     assert out.returncode != 0
     assert "--timeout must be longer than 0" in out.stderr
     assert not (tmp_path / "ductor" / "jobs").exists()
+
+
+def test_setup_creates_the_hook_with_the_bots_python_and_hides_the_token(tmp_path: Path) -> None:
+    home = tmp_path / "ductor"
+    (home / "config").mkdir(parents=True)
+    (home / "config" / "config.json").write_text(json.dumps({"webhooks": {"enabled": True}}))
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    launcher = bindir / "ductor"
+    launcher.write_text(f"#!{sys.executable}\n")  # the interpreter that has ductor_bot
+    launcher.chmod(0o755)
+    env = {**os.environ, "DUCTOR_HOME": str(home), "PATH": f"{bindir}:{os.environ['PATH']}"}
+    out = subprocess.run(
+        ["/usr/bin/python3", str(TOOLS / "run_job.py"), "--setup"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert out.returncode == 0, out.stderr
+    hooks = json.loads((home / "webhooks.json").read_text())["hooks"]
+    hook = next(h for h in hooks if h["id"] == "ductor-jobs")
+    assert hook["mode"] == "wake"
+    assert hook["token"] not in out.stdout + out.stderr
+    assert json.loads(out.stdout)["next"] == "ready"
