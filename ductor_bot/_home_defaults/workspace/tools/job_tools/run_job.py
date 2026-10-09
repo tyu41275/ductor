@@ -86,6 +86,8 @@ def launch(args: argparse.Namespace) -> dict:
         raise SystemExit("give the command after --")
     if not shutil.which("systemd-run"):
         raise SystemExit("systemd-run not found: durable jobs need systemd user units")
+    if args.timeout and seconds(args.timeout) <= 0:
+        raise SystemExit("--timeout must be longer than 0")
     job_id = new_job_id(args.name)
     directory = job_dir(job_id)
     directory.mkdir(parents=True)

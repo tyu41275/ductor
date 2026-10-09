@@ -149,3 +149,18 @@ def test_cancel_keeps_a_finished_result(tmp_path: Path) -> None:
     )
     assert "already finished" in out.stdout
     assert json.loads((job / "status.json").read_text())["status"] == "succeeded"
+
+
+def test_zero_timeout_is_refused(tmp_path: Path) -> None:
+    env = {**os.environ, "DUCTOR_HOME": str(tmp_path / "ductor")}
+    out = subprocess.run(
+        [sys.executable, str(TOOLS / "run_job.py"), "--timeout", "0s", "--", "true"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert out.returncode != 0
+    assert "--timeout must be longer than 0" in out.stderr
+    assert not (tmp_path / "ductor" / "jobs").exists()
