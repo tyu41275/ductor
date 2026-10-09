@@ -50,13 +50,30 @@ def seconds(text: str) -> int:
     return int(match[1]) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[match[2]]
 
 
+def ductor_python() -> str:
+    """The interpreter that has ``ductor_bot`` installed (webhook_tools import it).
+
+    Agents run tools with the system ``python3``, which cannot import ``ductor_bot``;
+    the ``ductor`` launcher's shebang names the bot's own interpreter.
+    """
+    launcher = shutil.which("ductor")
+    if launcher:
+        try:
+            first = Path(launcher).read_text(encoding="utf-8", errors="replace").splitlines()[0]
+        except (OSError, IndexError):
+            first = ""
+        if first.startswith("#!") and Path(first[2:].strip()).exists():
+            return first[2:].strip()
+    return sys.executable
+
+
 def setup() -> dict:
     if webhook_endpoint() is None:
         hooks = read_json(HOOKS_PATH).get("hooks", [])
         if not any(isinstance(h, dict) and h.get("id") == HOOK_ID for h in hooks):
             subprocess.run(
                 [
-                    sys.executable,
+                    ductor_python(),
                     str(HERE.parent / "webhook_tools" / "webhook_add.py"),
                     "--name",
                     HOOK_ID,
@@ -70,6 +87,7 @@ def setup() -> dict:
                     PROMPT,
                 ],
                 check=True,
+                stdout=subprocess.DEVNULL,  # its output includes the hook's bearer token
             )
     enabled = bool(read_json(CONFIG_PATH).get("webhooks", {}).get("enabled"))
     return {
