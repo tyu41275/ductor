@@ -462,3 +462,9 @@ async_task_received = "📥 **Async task received** from `{sender}`\nSession: `{
 [effort]
 select = "Select reasoning effort for {model}:"
 unsupported = "Reasoning effort is not configurable for the `{provider}` provider."
+
+[compact]
+no_session = "No active session to compact."
+unsupported = "Compacting is only supported for Claude sessions (this session uses {provider})."
+failed = "Compact failed: {error}"
+done = "Session compacted. The conversation continues with a summary of what came before."

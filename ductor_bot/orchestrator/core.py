@@ -509,6 +509,12 @@ class Orchestrator:
         logger.info("Active provider session reset provider=%s model=%s", provider, model)
         return provider
 
+    async def compact_active_session(self, key: SessionKey, instructions: str = "") -> str:
+        """Compact the active CLI session in place (``/compact``); returns a status line."""
+        from ductor_bot.orchestrator.compact import compact_session
+
+        return await compact_session(self, key, instructions)
+
     async def abort(self, chat_id: int, topic_id: int | None = None) -> int:
         """Kill active CLI processes for *chat_id* (optionally scoped to *topic_id*).
 

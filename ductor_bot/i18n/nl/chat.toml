@@ -461,3 +461,9 @@ async_task_received = "📥 **Async taak ontvangen** van `{sender}`\nSessie: `{s
 [effort]
 select = "Kies de redeneerinzet voor {model}:"
 unsupported = "Redeneerinzet is niet instelbaar voor provider `{provider}`."
+
+[compact]
+no_session = "Geen actieve sessie om te comprimeren."
+unsupported = "Comprimeren wordt alleen ondersteund voor Claude-sessies (deze sessie gebruikt {provider})."
+failed = "Comprimeren mislukt: {error}"
+done = "Sessie gecomprimeerd. Het gesprek gaat verder met een samenvatting van wat eerder was."

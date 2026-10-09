@@ -134,7 +134,7 @@ def _build_help_text() -> str:
     return fmt(
         t("help.header"),
         SEP,
-        f"{t('help.cat_daily')}\n{_help_line('new')}\n{_help_line('reset')}\n{_help_line('stop')}\n"
+        f"{t('help.cat_daily')}\n{_help_line('new')}\n{_help_line('compact')}\n{_help_line('reset')}\n{_help_line('stop')}\n"
         f"{_help_line('interrupt')}\n{_help_line('stop_all')}\n"
         f"{_help_line('model')}\n{_help_line('effort')}\n{_help_line('status')}\n{_help_line('memory')}",
         f"{t('help.cat_automation')}\n{_help_line('session')}\n{_help_line('tasks')}\n{_help_line('cron')}",
@@ -400,6 +400,7 @@ class TelegramBot:
         r.message(Command("stop", ignore_case=True))(self._on_stop)
         r.message(Command("restart", ignore_case=True))(self._on_restart)
         r.message(Command("new", ignore_case=True))(self._on_new)
+        r.message(Command("compact", ignore_case=True))(self._on_compact)
         r.message(Command("session", ignore_case=True))(self._on_session)
         r.message(Command("sessions", ignore_case=True))(self._on_sessions)
         r.message(Command("tasks", ignore_case=True))(self._on_tasks)
@@ -953,6 +954,15 @@ class TelegramBot:
         if self._config.group_mention_only and not self._is_addressed(message):
             return
         await handle_new_session(self._orch, self._bot, message, topic_names=self._topic_names)
+
+    async def _on_compact(self, message: Message) -> None:
+        if self._is_for_others(message):
+            return
+        if self._config.group_mention_only and not self._is_addressed(message):
+            return
+        from ductor_bot.messenger.telegram.handlers import handle_compact
+
+        await handle_compact(self._orch, self._bot, message)
 
     async def _on_forum_topic_created(self, message: Message) -> None:
         """Cache the name when a forum topic is created."""

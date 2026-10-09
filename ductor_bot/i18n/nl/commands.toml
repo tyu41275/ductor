@@ -2,6 +2,7 @@
 
 [bot]
 new = "Nieuw gesprek"
+compact = "Sessie comprimeren"
 reset = "Chat resetten"
 stop = "Huidig + wachtrij stoppen"
 interrupt = "Onderbreken, wachtrij bewaren"

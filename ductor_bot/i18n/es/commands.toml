@@ -2,6 +2,7 @@
 
 [bot]
 new = "Nuevo chat"
+compact = "Compactar la sesión"
 reset = "Reiniciar chat"
 stop = "Detener actual + cola"
 interrupt = "Interrumpir, mantener cola"
